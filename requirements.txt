@@ -1,4 +1,8 @@
-Django
-django-filter
-djangorestframework
-gunicorn
+flask
+Flask-SQLAlchemy
+pandas
+torch
+transformers
+flask_marshmallow
+requests
+marshmallow-sqlalchemy
