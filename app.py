@@ -3,7 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
 from models import db, candidato, red_social, consulta
 from endpoints.reddit import buscarComentarios
-from endpoints.youtube import buscar_videos
+from endpoints.youtube import obtener_videos_y_comentarios
 from endpoints.prediccionSentimientos import predecir_sentimiento, predict_sentiment
 from endpoints.facebook import obtener_comentarios_facebook 
 app = Flask(__name__)
@@ -137,20 +137,30 @@ def obtener_comentarios():
     comentarios = obtener_comentarios_facebook(palabra_clave)
     return jsonify(comentarios)
 
-@app.route('/api/buscar_reddit', methods=['GET'] )
+@app.route('/api/buscar_reddit', methods=['GET', 'POST'])
 def buscar_Reddit():
-    query = request.args.get('query','')
+    if request.method == 'POST':
+        query = request.json.get('query', '')
+    else:
+        query = request.args.get('query', '')
+
     if not query:
-        return jsonify({"error":"Se requiere un parámetro de búsqueda"}), 400
+        return jsonify({"error": "Se requiere un parámetro de búsqueda"}), 400
+    
     resultado = buscarComentarios(query)
     return jsonify(resultado)
 
-@app.route('/api/buscar_youtube', methods=['GET'])
-def buscar_Youtube():
-    query = request.args.get('query','')
+@app.route('/api/buscar_youtube', methods=['GET','POST'])
+def buscar_youtube():
+    if request.method == 'POST':
+        query = request.json.get('query', '')
+    else:
+        query = request.args.get('query', '')
+
     if not query:
-        return jsonify({"error":"Se requiere un parámetro de búsqueda"}), 400
-    resultado = buscar_videos(query)
+        return jsonify({"error": "Se requiere un parámetro de búsqueda"}), 400
+
+    resultado = obtener_videos_y_comentarios(query)
     return jsonify(resultado)
 #prediccion con el modelo
 @app.route('/api/predecir_sentimiento', methods=['POST'])

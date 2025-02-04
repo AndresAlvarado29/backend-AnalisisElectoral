@@ -2,10 +2,9 @@ import os
 import csv
 from googleapiclient.discovery import build
 from youtube_comment_downloader import YoutubeCommentDownloader
-import pandas as pd
 
 # Configura tu API Key de YouTube en las variables de entorno
-os.environ["YOUTUBE_API_KEY"] = "A"  # Reemplaza con tu clave de API
+os.environ["YOUTUBE_API_KEY"] = "AIzaSyBMGj5Rxu1G1yEp9flEsWx-Irfo0lJP_zo"  # Reemplaza con tu clave de API
 
 def buscar_videos(query, max_results=5):
     """
@@ -33,11 +32,9 @@ def buscar_videos(query, max_results=5):
             video_title = item["snippet"]["title"]
             video_id = item["id"]["videoId"]
             video_url = f"https://www.youtube.com/watch?v={video_id}"
-            videos.append({"title": video_title, "url": video_url})
+            videos.append({"title": video_title, "url": video_url, "video_id": video_id})
         
-        # Eliminar duplicados en la lista de videos
-        videos_unicos = {v["url"]: v for v in videos}.values()
-        return list(videos_unicos)
+        return videos
 
     except Exception as e:
         print(f"Ocurrió un error al realizar la búsqueda: {e}")
@@ -62,42 +59,23 @@ def descargar_comentarios(video_id, max_comentarios=10):
         print(f"Ocurrió un error al descargar los comentarios del video {video_id}: {e}")
         return []
 
-def guardar_comentarios_csv(query, comentarios):
+def obtener_videos_y_comentarios(query, max_results=5, max_comentarios=10):
     """
-    Guarda una lista de comentarios en un archivo CSV.
+    Busca videos en YouTube y obtiene comentarios de cada uno.
+    Devuelve un JSON con los títulos, URLs y comentarios.
     """
-    filename = f"comentarios_{query.replace(' ', '_')}.csv"
-    try:
-        # Guardar solo los comentarios (sin video_title)
-        with open(filename, mode='w', encoding='utf-8-sig', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow(["comentario"])  # Encabezado
-            for comentario in comentarios:
-                writer.writerow([comentario])  # Solo guardar el texto del comentario
-        print(f"Comentarios guardados en el archivo: {filename}")
-    except Exception as e:
-        print(f"Error al guardar comentarios en CSV: {e}")
+    videos = buscar_videos(query, max_results)
 
-if __name__ == "__main__":
-    # Solicitar término de búsqueda
-    termino_busqueda = input("Ingrese el término de búsqueda: ")
+    if not videos:
+        return {"error": "No se encontraron videos para la búsqueda."}
 
-    # Buscar videos
-    videos = buscar_videos(termino_busqueda)
+    resultados = []
+    for video in videos:
+        comentarios = descargar_comentarios(video["video_id"], max_comentarios)
+        resultados.append({
+            "titulo": video["title"],
+            "url": video["url"],
+            "comentarios": comentarios
+        })
 
-    if videos:
-        print("\nResultados de búsqueda:")
-        for video in videos:
-            print(f"Título: {video['title']}\nURL: {video['url']}\n")
-
-        # Descargar comentarios de cada video
-        todos_comentarios = []
-        for video in videos:
-            print(f"Descargando comentarios para: {video['title']}")
-            comentarios = descargar_comentarios(video["url"].split('=')[-1], max_comentarios=10)
-            todos_comentarios.extend(comentarios)
-
-        # Guardar todos los comentarios en un archivo CSV
-        guardar_comentarios_csv(termino_busqueda, todos_comentarios)
-    else:
-        print("No se encontraron videos para el término de búsqueda.")
+    return {"videos": resultados}
