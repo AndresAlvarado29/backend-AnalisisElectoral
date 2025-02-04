@@ -124,13 +124,18 @@ def delete_consulta(id):
 #CONSULTAS API
 @app.route('/api/facebook_comments', methods=['POST'])
 def obtener_comentarios():
+    """
+    Endpoint para buscar publicaciones en Facebook y extraer comentarios.
+    Recibe un JSON con la clave "query".
+    """
     data = request.json
     palabra_clave = data.get("query")
+
     if not palabra_clave:
         return jsonify({"error": "Se requiere una palabra clave para buscar publicaciones."}), 400
     
     comentarios = obtener_comentarios_facebook(palabra_clave)
-    return jsonify({"comentarios": comentarios})
+    return jsonify(comentarios)
 
 @app.route('/api/buscar_reddit', methods=['GET'] )
 def buscar_Reddit():

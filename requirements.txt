@@ -8,3 +8,4 @@ requests
 marshmallow-sqlalchemy
 flask_sqlalchemy
 googleapiclient
+apify_client
