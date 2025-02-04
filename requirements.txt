@@ -6,3 +6,5 @@ transformers
 flask_marshmallow
 requests
 marshmallow-sqlalchemy
+flask_sqlalchemy
+googleapiclient
