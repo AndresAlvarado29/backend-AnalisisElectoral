@@ -1,18 +1,13 @@
-import csv
 import os
-import pandas as pd
 from apify_client import ApifyClient
 
 # API Key de Apify (debe colocarse en variables de entorno por seguridad)
-API_KEY_POSTS = os.getenv("APIFY_API_KEY", "apify_a")
+API_KEY_POSTS = os.getenv("APIFY_API_KEY", "apify_api_Ji1r9d7CypLVf9bORjfZMt9DUnDdvP0Hek8W")
 API_KEY_COMMENTS = API_KEY_POSTS  # Se usa la misma API Key para comentarios
 
 # Inicializar el cliente de Apify
 client_posts = ApifyClient(API_KEY_POSTS)
 client_comments = ApifyClient(API_KEY_COMMENTS)
-
-# Nombre del archivo donde se guardarán todos los comentarios
-ARCHIVO_CSV = "facebook_comentarios.csv"
 
 def buscar_posts(nombre):
     """
@@ -30,15 +25,8 @@ def buscar_posts(nombre):
     # Ejecutar el actor de Apify para buscar posts
     run = client_posts.actor("4YfcIWyRtJHJ5Ha3a").call(run_input=run_input)
 
-    # Lista para almacenar los enlaces de posts encontrados
-    links = []
-
-    print("📌 Posts encontrados:")
-    for item in client_posts.dataset(run["defaultDatasetId"]).iterate_items():
-        link = item.get("link")
-        if link:
-            links.append(link)
-            print(link)  # Mostrar los enlaces encontrados
+    # Extraer los enlaces de los posts
+    links = [item.get("link") for item in client_posts.dataset(run["defaultDatasetId"]).iterate_items() if item.get("link")]
 
     if not links:
         print("\n❌ No se encontraron posts.")
@@ -49,7 +37,7 @@ def buscar_posts(nombre):
 def extraer_comentarios(links):
     """
     Extrae comentarios de una lista de enlaces de posts.
-    Devuelve una lista de comentarios junto con sus enlaces.
+    Devuelve solo los comentarios en una lista.
     """
     comentarios_totales = []
 
@@ -65,29 +53,17 @@ def extraer_comentarios(links):
         # Ejecutar el actor de Apify para extraer comentarios
         run = client_comments.actor("apify/facebook-comments-scraper").call(run_input=run_input)
 
-        # Lista para almacenar los comentarios extraídos de este post
+        # Extraer solo los comentarios sin información adicional
         for item in client_comments.dataset(run["defaultDatasetId"]).iterate_items():
             if "text" in item:
-                comentarios_totales.append({"post": link, "comentario": item.get("text", "")})
+                comentarios_totales.append(item.get("text", ""))
 
     return comentarios_totales
 
-def guardar_comentarios_csv(comentarios):
+def obtener_solo_comentarios_facebook(query):
     """
-    Guarda todos los comentarios extraídos en un único archivo CSV.
-    """
-    df_final = pd.DataFrame(comentarios)
-
-    if os.path.exists(ARCHIVO_CSV):
-        df_existente = pd.read_csv(ARCHIVO_CSV, encoding="utf-8-sig")
-        df_final = pd.concat([df_existente, df_final], ignore_index=True)
-
-    df_final.to_csv(ARCHIVO_CSV, index=False, encoding="utf-8-sig")
-    print(f"\n✅ Todos los comentarios han sido guardados en '{ARCHIVO_CSV}'.\n")
-
-def obtener_comentarios_facebook(query):
-    """
-    Orquesta la búsqueda de posts y la extracción de comentarios.
+    Orquesta la búsqueda de posts y la extracción de solo los comentarios.
+    Devuelve un JSON con una lista de comentarios.
     """
     links = buscar_posts(query)
     if not links:
@@ -95,9 +71,7 @@ def obtener_comentarios_facebook(query):
 
     comentarios = extraer_comentarios(links)
 
-    if comentarios:
-        guardar_comentarios_csv(comentarios)
-    else:
-        print("\n❌ No se encontraron comentarios en los posts.")
+    if not comentarios:
+        return {"message": "No se encontraron comentarios en los posts de Facebook."}
 
     return {"comentarios": comentarios}

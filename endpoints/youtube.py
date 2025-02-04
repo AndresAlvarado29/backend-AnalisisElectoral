@@ -1,5 +1,4 @@
 import os
-import csv
 from googleapiclient.discovery import build
 from youtube_comment_downloader import YoutubeCommentDownloader
 
@@ -8,7 +7,7 @@ os.environ["YOUTUBE_API_KEY"] = "AIzaSyBMGj5Rxu1G1yEp9flEsWx-Irfo0lJP_zo"  # Ree
 
 def buscar_videos(query, max_results=5):
     """
-    Busca videos en YouTube basados en un término de búsqueda y devuelve una lista de videos.
+    Busca videos en YouTube y devuelve sus IDs.
     """
     api_key = os.getenv("YOUTUBE_API_KEY")
     if not api_key:
@@ -26,15 +25,10 @@ def buscar_videos(query, max_results=5):
         )
         response = request.execute()
 
-        # Procesar resultados
-        videos = []
-        for item in response.get("items", []):
-            video_title = item["snippet"]["title"]
-            video_id = item["id"]["videoId"]
-            video_url = f"https://www.youtube.com/watch?v={video_id}"
-            videos.append({"title": video_title, "url": video_url, "video_id": video_id})
-        
-        return videos
+        # Extraer solo los IDs de los videos
+        video_ids = [item["id"]["videoId"] for item in response.get("items", [])]
+
+        return video_ids
 
     except Exception as e:
         print(f"Ocurrió un error al realizar la búsqueda: {e}")
@@ -42,7 +36,7 @@ def buscar_videos(query, max_results=5):
 
 def descargar_comentarios(video_id, max_comentarios=10):
     """
-    Descarga un número limitado de comentarios de un video dado su ID.
+    Descarga comentarios de un video dado su ID.
     """
     downloader = YoutubeCommentDownloader()
     comments = []
@@ -50,7 +44,7 @@ def descargar_comentarios(video_id, max_comentarios=10):
     try:
         for i, comment in enumerate(downloader.get_comments(video_id)):
             comments.append(comment["text"])
-            if i + 1 >= max_comentarios:  # Limitar a max_comentarios
+            if i + 1 >= max_comentarios:
                 break
 
         return comments
@@ -59,23 +53,19 @@ def descargar_comentarios(video_id, max_comentarios=10):
         print(f"Ocurrió un error al descargar los comentarios del video {video_id}: {e}")
         return []
 
-def obtener_videos_y_comentarios(query, max_results=5, max_comentarios=10):
+def obtener_solo_comentarios(query, max_results=5, max_comentarios=10):
     """
-    Busca videos en YouTube y obtiene comentarios de cada uno.
-    Devuelve un JSON con los títulos, URLs y comentarios.
+    Busca videos en YouTube y obtiene solo los comentarios.
+    Devuelve un JSON con una lista de comentarios.
     """
-    videos = buscar_videos(query, max_results)
+    video_ids = buscar_videos(query, max_results)
 
-    if not videos:
+    if not video_ids:
         return {"error": "No se encontraron videos para la búsqueda."}
 
-    resultados = []
-    for video in videos:
-        comentarios = descargar_comentarios(video["video_id"], max_comentarios)
-        resultados.append({
-            "titulo": video["title"],
-            "url": video["url"],
-            "comentarios": comentarios
-        })
+    comentarios_totales = []
+    for video_id in video_ids:
+        comentarios = descargar_comentarios(video_id, max_comentarios)
+        comentarios_totales.extend(comentarios)
 
-    return {"videos": resultados}
+    return {"comentarios": comentarios_totales}

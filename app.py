@@ -3,15 +3,48 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
 from models import db, candidato, red_social, consulta
 from endpoints.reddit import buscarComentarios
-from endpoints.youtube import obtener_videos_y_comentarios
+from endpoints.youtube import obtener_solo_comentarios
 from endpoints.prediccionSentimientos import predecir_sentimiento, predict_sentiment
-from endpoints.facebook import obtener_comentarios_facebook 
+from endpoints.facebook import obtener_solo_comentarios_facebook
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI']='sqlite:///../database/scrapEE.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS']= False
 
 db.init_app(app)
 ma= Marshmallow(app)
+
+def analizar_sentimientos(comentarios):
+    if not comentarios:
+        return {"error": "No se encontraron comentarios para analizar."}
+
+    # Predecir los sentimientos
+    resultados = [{"comentario": c, "sentimiento": predict_sentiment(c)} for c in comentarios]
+
+    # Inicializar el conteo de sentimientos
+    conteo = {"Muy Positivo": 0, "Positivo": 0, "Neutro": 0, "Negativo": 0, "Muy Negativo": 0}
+
+    # Contar ocurrencias de cada sentimiento
+    for r in resultados:
+        conteo[r["sentimiento"]] += 1
+
+    total_comentarios = sum(conteo.values())
+    nivel_aceptacion = ((conteo["Muy Positivo"] + conteo["Positivo"]) / total_comentarios * 100) if total_comentarios > 0 else 0
+
+    # Definir el nivel de aceptación
+    if nivel_aceptacion >= 60:
+        nivel = "Alto"
+    elif nivel_aceptacion >= 30:
+        nivel = "Medio"
+    else:
+        nivel = "Bajo"
+
+    return {
+        "comentarios": resultados,
+        "total_comentarios": total_comentarios,
+        "conteo": conteo,
+        "nivel_aceptacion": nivel_aceptacion,
+        "clasificacion_nivel": nivel
+    }
 
 class CandidatoSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
@@ -122,96 +155,53 @@ def delete_consulta(id):
         return jsonify({'message': 'consulta eliminada'})
     return jsonify({'message': 'consulta no encontrada'}), 404
 #CONSULTAS API
-@app.route('/api/facebook_comments', methods=['POST'])
-def obtener_comentarios():
+
+# Lista de candidatos
+CANDIDATOS = [
+    {"id": 1, "nombre": "Jimmy Jairala"},
+    {"id": 2, "nombre": "Jorge Escala"},
+    {"id": 3, "nombre": "Andrea Gonzalez"},
+    {"id": 4, "nombre": "Victor Araus"},
+    {"id": 5, "nombre": "Luisa Gonzalez"},
+    {"id": 6, "nombre": "Henry Kronfle"},
+    {"id": 7, "nombre": "Daniel Noboa"},
+    {"id": 8, "nombre": "Luis F. Tilleria"},
+    {"id": 9, "nombre": "Carlos Rabascall"},
+    {"id": 10, "nombre": "Juan I. Cueva"},
+    {"id": 11, "nombre": "Pedro Granja"},
+    {"id": 12, "nombre": "Leonidas Iza"},
+    {"id": 13, "nombre": "Ivan Saquicela"},
+    {"id": 14, "nombre": "Francesco Tabacchi"},
+    {"id": 15, "nombre": "Wilson Gomez"},
+    {"id": 16, "nombre": "Henry Cucalon"},
+]
+
+# Lista de redes sociales
+REDES_SOCIALES = {
+    "Facebook": 1,
+    "Youtube": 2,
+    "Reddit": 3
+}
+
+def analizar_sentimientos_y_guardar(comentarios, query, red_social):
     """
-    Endpoint para buscar publicaciones en Facebook y extraer comentarios.
-    Recibe un JSON con la clave "query".
+    Analiza sentimientos, obtiene nivel de aceptación y guarda la consulta en la base de datos.
     """
-    data = request.json
-    palabra_clave = data.get("query")
-
-    if not palabra_clave:
-        return jsonify({"error": "Se requiere una palabra clave para buscar publicaciones."}), 400
-    
-    comentarios = obtener_comentarios_facebook(palabra_clave)
-    return jsonify(comentarios)
-
-@app.route('/api/buscar_reddit', methods=['GET', 'POST'])
-def buscar_Reddit():
-    if request.method == 'POST':
-        query = request.json.get('query', '')
-    else:
-        query = request.args.get('query', '')
-
-    if not query:
-        return jsonify({"error": "Se requiere un parámetro de búsqueda"}), 400
-    
-    resultado = buscarComentarios(query)
-    return jsonify(resultado)
-
-@app.route('/api/buscar_youtube', methods=['GET','POST'])
-def buscar_youtube():
-    if request.method == 'POST':
-        query = request.json.get('query', '')
-    else:
-        query = request.args.get('query', '')
-
-    if not query:
-        return jsonify({"error": "Se requiere un parámetro de búsqueda"}), 400
-
-    resultado = obtener_videos_y_comentarios(query)
-    return jsonify(resultado)
-#prediccion con el modelo
-@app.route('/api/predecir_sentimiento', methods=['POST'])
-def predecir_sentimiento_api():
-    data = request.json
-    comentarios = data.get('comentarios', [])
-    
     if not comentarios:
-        return jsonify({"error": "Se requiere una lista de comentarios"}), 400
-    
-    resultados = [predecir_sentimiento(comentario) for comentario in comentarios]
-    conteo = {"Positivo": 0, "Neutro": 0, "Negativo": 0}
-    
-    for resultado in resultados:
-        conteo[resultado] += 1
-    
-    total = sum(conteo.values())
-    nivel_aceptacion = (conteo["Positivo"] / total) * 100 if total > 0 else 0
-    
-    if nivel_aceptacion >= 60:
-        nivel = "Alto"
-    elif nivel_aceptacion >= 30:
-        nivel = "Medio"
-    else:
-        nivel = "Bajo"
-    
-    return jsonify({
-        "resultados": resultados,
-        "conteo": conteo,
-        "nivel_aceptacion": nivel_aceptacion,
-        "clasificacion_nivel": nivel
-    })
-@app.route('/api/predecir_sentimiento2', methods=['POST'])
-def predecir_sentimiento_api2():
-    data = request.json
-    comentarios = data.get('comentarios', [])
+        return {"error": "No se encontraron comentarios para analizar."}
 
-    if not comentarios:
-        return jsonify({"error": "Se requiere una lista de comentarios"}), 400
+    # Predecir los sentimientos
+    resultados = [{"comentario": c, "sentimiento": predict_sentiment(c)} for c in comentarios]
 
-    resultados = [predict_sentiment(comentario) for comentario in comentarios]
-    
-    # Inicializar el conteo de cada sentimiento
+    # Inicializar el conteo de sentimientos
     conteo = {"Muy Positivo": 0, "Positivo": 0, "Neutro": 0, "Negativo": 0, "Muy Negativo": 0}
 
     # Contar ocurrencias de cada sentimiento
-    for sentimiento in resultados:
-        conteo[sentimiento] += 1  # Ahora 'sentimiento' es un string y sí puede ser clave en el diccionario
+    for r in resultados:
+        conteo[r["sentimiento"]] += 1
 
-    total = sum(conteo.values())
-    nivel_aceptacion = (conteo["Positivo"] / total) * 100 if total > 0 else 0
+    total_comentarios = sum(conteo.values())
+    nivel_aceptacion = ((conteo["Muy Positivo"] + conteo["Positivo"]) / total_comentarios * 100) if total_comentarios > 0 else 0
 
     # Definir el nivel de aceptación
     if nivel_aceptacion >= 60:
@@ -221,14 +211,75 @@ def predecir_sentimiento_api2():
     else:
         nivel = "Bajo"
 
-    return jsonify({
-        "resultados": resultados,
+    # Identificar si el nombre de un candidato está en la búsqueda
+    id_candidato = None
+    for candidato in CANDIDATOS:
+        if candidato["nombre"].lower() in query.lower():
+            id_candidato = candidato["id"]
+            break
+
+    # Guardar en la base de datos
+    nueva_consulta = consulta(
+        nivel_aceptacion=nivel,
+        nivel_aceptacion_num=nivel_aceptacion,
+        numero_comentarios=total_comentarios,
+        id_candidato=id_candidato,
+        id_red_social=REDES_SOCIALES.get(red_social, None)  # Si no coincide, será None
+    )
+    db.session.add(nueva_consulta)
+    db.session.commit()
+
+    return {
+        "comentarios": resultados,
+        "total_comentarios": total_comentarios,
         "conteo": conteo,
         "nivel_aceptacion": nivel_aceptacion,
         "clasificacion_nivel": nivel
-    })
-with app.app_context():
-    db.create_all()
+    }
+
+@app.route('/api/buscar_facebook', methods=['POST'])
+def buscar_facebook_y_predecir():
+    """
+    Endpoint que obtiene comentarios de Facebook, analiza sentimientos y guarda en la base de datos.
+    """
+    data = request.json
+    palabra_clave = data.get("query")
+
+    if not palabra_clave:
+        return jsonify({"error": "Se requiere una palabra clave para buscar publicaciones."}), 400
+    
+    comentarios = obtener_solo_comentarios_facebook(palabra_clave)
+    return jsonify(analizar_sentimientos_y_guardar(comentarios.get("comentarios", []), palabra_clave, "Facebook"))
+
+@app.route('/api/buscar_reddit', methods=['POST'])
+def buscar_reddit_y_predecir():
+    """
+    Endpoint que obtiene comentarios de Reddit, analiza sentimientos y guarda en la base de datos.
+    """
+    data = request.json
+    query = data.get("query", "")
+
+    if not query:
+        return jsonify({"error": "Se requiere un parámetro de búsqueda"}), 400
+
+    comentarios = buscarComentarios(query)
+    return jsonify(analizar_sentimientos_y_guardar(comentarios.get("comentarios", []), query, "Reddit"))
+
+@app.route('/api/buscar_youtube', methods=['POST'])
+def buscar_youtube_y_predecir():
+    """
+    Endpoint que obtiene comentarios de YouTube, analiza sentimientos y guarda en la base de datos.
+    """
+    data = request.json
+    query = data.get("query", "")
+
+    if not query:
+        return jsonify({"error": "Se requiere un parámetro de búsqueda"}), 400
+
+    comentarios = obtener_solo_comentarios(query)
+    return jsonify(analizar_sentimientos_y_guardar(comentarios.get("comentarios", []), query, "Youtube"))
 
 if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
     app.run(debug=True)
