@@ -32,7 +32,38 @@ def predecir_sentimiento(texto):
     
     return etiquetas[prediccion]
 
-# Ejemplo de prueba
-#texto_prueba = "Me encanta este candidato, sus ideas son muy innovadoras."
-#resultado = predecir_sentimiento(texto_prueba)
-#print(f"Sentimiento: {resultado}")
+
+# Cargar modelo y tokenizer
+MODEL_NAME = "tabularisai/multilingual-sentiment-analysis"
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME)
+model.eval()  # Modo evaluación
+
+# Verificar si hay GPU disponible
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
+print(f"✅ Usando dispositivo: {device}")
+
+# Ver cuántas etiquetas tiene el modelo
+num_labels = model.config.num_labels
+print(f"El modelo tiene {num_labels} etiquetas.")
+
+# Diccionario corregido con las 5 etiquetas del modelo
+label_map = {
+    0: "Muy Negativo",
+    1: "Negativo",
+    2: "Neutro",
+    3: "Positivo",
+    4: "Muy Positivo"
+}
+
+def predict_sentiment(comment):
+    inputs = tokenizer(comment, return_tensors="pt", padding=True, truncation=True, max_length=128).to(device)
+    
+    with torch.no_grad():
+        outputs = model(**inputs)
+    
+    # Obtener la predicción
+    label = torch.argmax(outputs.logits, dim=-1).item()
+    
+    return label_map[label]  # Solo devolver la etiqueta, no el array de probabilidades
