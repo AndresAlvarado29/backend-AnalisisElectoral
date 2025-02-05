@@ -9,3 +9,4 @@ marshmallow-sqlalchemy
 flask_sqlalchemy
 googleapiclient
 apify_client
+flask-cors

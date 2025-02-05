@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
 from flask_marshmallow import Marshmallow
 from models import db, candidato, red_social, consulta
 from endpoints.reddit import buscarComentarios
@@ -10,6 +11,7 @@ app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI']='sqlite:///../database/scrapEE.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS']= False
 
+CORS(app)
 db.init_app(app)
 ma= Marshmallow(app)
 
@@ -236,7 +238,31 @@ def analizar_sentimientos_y_guardar(comentarios, query, red_social):
         "nivel_aceptacion": nivel_aceptacion,
         "clasificacion_nivel": nivel
     }
+@app.route('/api/buscar_todas', methods=['POST'])
+def buscar_en_todas_las_redes():
+    """
+    Endpoint que busca comentarios en Facebook, YouTube y Reddit,
+    analiza sentimientos y guarda un solo registro en la base de datos.
+    """
+    data = request.json
+    palabra_clave = data.get("query")
 
+    if not palabra_clave:
+        return jsonify({"error": "Se requiere una palabra clave para buscar publicaciones."}), 400
+    
+    # Obtener comentarios de cada plataforma
+    comentarios_facebook = obtener_solo_comentarios_facebook(palabra_clave).get("comentarios", [])
+    comentarios_youtube = obtener_solo_comentarios(palabra_clave).get("comentarios", [])
+    comentarios_reddit = buscarComentarios(palabra_clave).get("comentarios", [])
+
+    # Unir todos los comentarios
+    todos_los_comentarios = comentarios_facebook + comentarios_youtube + comentarios_reddit
+
+    # Analizar y guardar en la base de datos
+    resultado = analizar_sentimientos_y_guardar(todos_los_comentarios, palabra_clave, None)
+
+
+    return jsonify(resultado)
 @app.route('/api/buscar_facebook', methods=['POST'])
 def buscar_facebook_y_predecir():
     """
@@ -253,9 +279,6 @@ def buscar_facebook_y_predecir():
 
 @app.route('/api/buscar_reddit', methods=['POST'])
 def buscar_reddit_y_predecir():
-    """
-    Endpoint que obtiene comentarios de Reddit, analiza sentimientos y guarda en la base de datos.
-    """
     data = request.json
     query = data.get("query", "")
 
